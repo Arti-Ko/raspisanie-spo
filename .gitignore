@@ -1,0 +1,13 @@
+venv/
+__pycache__/
+*.pyc
+data/*.db
+build/
+dist/
+*.spec.bak
+.ruff_cache/
+Справка_*.pdf
+Расписание_*.pdf
+*.xlsx
+!assets/**
+
