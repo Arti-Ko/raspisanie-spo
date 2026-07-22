@@ -75,6 +75,9 @@ class CurriculumTab(QWidget):
 
         self.reload_programs()
 
+    def refresh_reference_data(self) -> None:
+        self.reload_programs()
+
     def reload_programs(self) -> None:
         current_id = self.program_combo.currentData()
         self.program_combo.blockSignals(True)

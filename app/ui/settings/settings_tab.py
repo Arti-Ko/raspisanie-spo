@@ -33,7 +33,12 @@ class SettingsTab(QTabWidget):
 
         self.currentChanged.connect(self._on_tab_changed)
 
+    def refresh_reference_data(self) -> None:
+        self._on_tab_changed(self.currentIndex())
+
     def _on_tab_changed(self, index: int) -> None:
         widget = self.widget(index)
-        if hasattr(widget, "refresh"):
+        if hasattr(widget, "refresh_reference_data"):
+            widget.refresh_reference_data()
+        elif hasattr(widget, "refresh"):
             widget.refresh()
