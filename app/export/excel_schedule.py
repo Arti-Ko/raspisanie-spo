@@ -14,6 +14,7 @@ from app.repositories.schedule import ScheduleEntry
 from app.repositories.text_format import abbreviate_name
 
 CENTER = Alignment(horizontal="center", vertical="center", wrap_text=True)
+ROOM_DISPLAY_CHARS = 3
 
 
 def export_schedule(
@@ -132,7 +133,9 @@ def _write_entry(sheet, row_start, row_end, content_col, room_col, entry) -> Non
         row=row_start, column=content_col, value=_entry_text(entry)
     )
     subject_cell.alignment = CENTER
-    room_cell = sheet.cell(row=row_start, column=room_col, value=entry.room or "")
+    room_cell = sheet.cell(
+        row=row_start, column=room_col, value=(entry.room or "")[:ROOM_DISPLAY_CHARS]
+    )
     room_cell.alignment = CENTER
 
 

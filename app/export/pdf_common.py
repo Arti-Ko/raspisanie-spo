@@ -13,7 +13,7 @@ PAGE_STYLE = """
     .subtitle { font-size: 14px; margin-bottom: 12px; }
     th { background-color: #4472C4; color: #ffffff; padding: 7px; text-align: center; }
     td { padding: 7px; text-align: left; }
-    td.room { padding: 7px 2px; text-align: center; font-size: 11px; }
+    td.room { padding: 7px 1px; text-align: center; font-size: 11px; word-break: break-all; }
     tr.even td { background-color: #F2F5FB; }
     tr.over-limit td { background-color: #F8CBAD; font-weight: bold; }
     .summary { margin: 10px 0; padding: 10px; background-color: #D9E2F3; }
@@ -55,4 +55,7 @@ def table_tag(width_px: int, column_widths_pct: list[int] | None = None) -> str:
     if column_widths_pct:
         cols = "".join(f'<col style="width:{pct}%">' for pct in column_widths_pct)
         colgroup = f"<colgroup>{cols}</colgroup>"
-    return f'<table width="{width_px}" border="1" cellspacing="0" cellpadding="0" style="border-color:#B7B7B7;">{colgroup}'
+    return (
+        f'<table width="{width_px}" border="1" cellspacing="0" cellpadding="0" '
+        f'style="border-color:#B7B7B7; table-layout: fixed; word-wrap: break-word;">{colgroup}'
+    )

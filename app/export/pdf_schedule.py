@@ -104,12 +104,15 @@ def _build_block_html(
     """
 
 
+ROOM_DISPLAY_CHARS = 3
+
+
 def _cells(entry: ScheduleEntry | None, rowspan: int = 1) -> tuple[str, str]:
     span = f" rowspan='{rowspan}'" if rowspan > 1 else ""
     if entry is None:
         return f"<td{span}>&nbsp;</td>", f"<td{span} class='room'>&nbsp;</td>"
     content = _cell_text(entry)
-    room = entry.room or ""
+    room = (entry.room or "")[:ROOM_DISPLAY_CHARS]
     return f"<td{span}>{content}</td>", f"<td{span} class='room'>{room}</td>"
 
 
