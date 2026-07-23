@@ -157,14 +157,15 @@ def room_conflict_at(
 
 
 def week_hours_for_group(group_id: int, calendar_week_id: int) -> int:
-    return len(list_entries_for_group_week(group_id, calendar_week_id)) * 2
+    entries = list_entries_for_group_week(group_id, calendar_week_id)
+    return len([e for e in entries if e.pair_number > 0]) * 2
 
 
 def clear_group_week(group_id: int, calendar_week_id: int) -> None:
     conn = get_connection()
     try:
         conn.execute(
-            "DELETE FROM schedule_entries WHERE group_id = ? AND calendar_week_id = ?",
+            "DELETE FROM schedule_entries WHERE group_id = ? AND calendar_week_id = ? AND pair_number > 0",
             (group_id, calendar_week_id),
         )
         conn.commit()
@@ -176,7 +177,7 @@ def clear_group_weeks(group_id: int, calendar_week_ids: list[int]) -> None:
     conn = get_connection()
     try:
         conn.executemany(
-            "DELETE FROM schedule_entries WHERE group_id = ? AND calendar_week_id = ?",
+            "DELETE FROM schedule_entries WHERE group_id = ? AND calendar_week_id = ? AND pair_number > 0",
             [(group_id, week_id) for week_id in calendar_week_ids],
         )
         conn.commit()

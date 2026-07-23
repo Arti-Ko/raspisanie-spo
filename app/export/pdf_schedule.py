@@ -2,7 +2,7 @@ from app.export.pdf_common import content_width_px, render_html_to_pdf, table_ta
 from app.export.schedule_layout import BLOCKS, DAY_LABELS, build_block_rows
 from app.repositories.schedule import ScheduleEntry
 
-COLUMN_WIDTHS = [12, 14, 24.67, 24.67, 24.66]
+COLUMN_WIDTHS = [6, 14, 26.67, 26.67, 26.66]
 
 
 def export_schedule(
@@ -50,12 +50,6 @@ def _build_block_html(days: tuple[int, ...], entry_by_slot: dict, width: int) ->
 
     rows = build_block_rows(days)
     body_rows = []
-    pair_row_count: dict[int, int] = {}
-    for spec in rows:
-        if not spec.is_zero_period:
-            pair_row_count[spec.pair_number] = (
-                pair_row_count.get(spec.pair_number, 0) + 1
-            )
 
     for row_index, spec in enumerate(rows):
         css_class = "even" if row_index % 2 else ""
@@ -64,16 +58,16 @@ def _build_block_html(days: tuple[int, ...], entry_by_slot: dict, width: int) ->
         if spec.is_zero_period:
             cells.append("<td><b>0</b></td>")
         elif spec.starts_pair:
-            cells.append(f"<td rowspan='2'><b>Пара {spec.pair_number}</b></td>")
+            cells.append(f"<td rowspan='2'><b>{spec.pair_number}</b></td>")
 
         cells.append(f"<td>{spec.time_label}</td>")
 
         for day in days:
-            if spec.is_zero_period:
-                cells.append("<td>&nbsp;</td>")
-                continue
             entry = entry_by_slot.get((day, spec.pair_number))
-            if spec.starts_pair:
+            if spec.is_zero_period:
+                content = _cell_text(entry) if entry else "&nbsp;"
+                cells.append(f"<td>{content}</td>")
+            elif spec.starts_pair:
                 content = _cell_text(entry) if entry else "&nbsp;"
                 cells.append(f"<td rowspan='2'>{content}</td>")
             # second урок row: cell already covered by rowspan above, emit nothing

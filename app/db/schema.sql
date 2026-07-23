@@ -111,7 +111,7 @@ CREATE TABLE IF NOT EXISTS schedule_entries (
     group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
     assignment_id INTEGER NOT NULL REFERENCES teacher_assignments(id) ON DELETE CASCADE,
     day_of_week INTEGER NOT NULL CHECK (day_of_week BETWEEN 1 AND 6),
-    pair_number INTEGER NOT NULL CHECK (pair_number BETWEEN 1 AND 5),
+    pair_number INTEGER NOT NULL CHECK (pair_number BETWEEN 0 AND 5),
     room TEXT,
     substitute_teacher_id INTEGER REFERENCES teachers(id) ON DELETE SET NULL,
     UNIQUE (group_id, calendar_week_id, day_of_week, pair_number)

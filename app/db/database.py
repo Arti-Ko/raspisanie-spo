@@ -59,3 +59,32 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
         conn.execute(
             "ALTER TABLE curriculum_items ADD COLUMN lesson_type TEXT NOT NULL DEFAULT 'theory'"
         )
+
+    _migrate_schedule_entries_allow_zero_period(conn)
+
+
+def _migrate_schedule_entries_allow_zero_period(conn: sqlite3.Connection) -> None:
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'schedule_entries'"
+    ).fetchone()
+    if row is None or "BETWEEN 1 AND 5" not in row["sql"]:
+        return
+
+    conn.execute("PRAGMA foreign_keys = OFF")
+    conn.execute("""
+        CREATE TABLE schedule_entries_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            calendar_week_id INTEGER NOT NULL REFERENCES calendar_weeks(id) ON DELETE CASCADE,
+            group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+            assignment_id INTEGER NOT NULL REFERENCES teacher_assignments(id) ON DELETE CASCADE,
+            day_of_week INTEGER NOT NULL CHECK (day_of_week BETWEEN 1 AND 6),
+            pair_number INTEGER NOT NULL CHECK (pair_number BETWEEN 0 AND 5),
+            room TEXT,
+            substitute_teacher_id INTEGER REFERENCES teachers(id) ON DELETE SET NULL,
+            UNIQUE (group_id, calendar_week_id, day_of_week, pair_number)
+        )
+        """)
+    conn.execute("INSERT INTO schedule_entries_new SELECT * FROM schedule_entries")
+    conn.execute("DROP TABLE schedule_entries")
+    conn.execute("ALTER TABLE schedule_entries_new RENAME TO schedule_entries")
+    conn.execute("PRAGMA foreign_keys = ON")

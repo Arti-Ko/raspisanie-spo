@@ -47,10 +47,10 @@ def export_schedule(
         row = _write_block(sheet, row, days, entry_by_slot)
         row += 2
 
-    sheet.column_dimensions["A"].width = 10
-    sheet.column_dimensions["B"].width = 14
+    sheet.column_dimensions["A"].width = 6
+    sheet.column_dimensions["B"].width = 13
     for col_letter in "CDE":
-        sheet.column_dimensions[col_letter].width = 22
+        sheet.column_dimensions[col_letter].width = 24
 
     workbook.save(file_path)
 
@@ -81,7 +81,7 @@ def _write_block(
             sheet.cell(row=row, column=1, value="0")
         elif spec.starts_pair:
             pair_merge_start[spec.pair_number] = row
-            sheet.cell(row=row, column=1, value=f"Пара {spec.pair_number}")
+            sheet.cell(row=row, column=1, value=str(spec.pair_number))
         else:
             first_row = pair_merge_start[spec.pair_number]
             sheet.merge_cells(
@@ -90,11 +90,13 @@ def _write_block(
 
         for col_offset, day in enumerate(days):
             col = 3 + col_offset
-            if spec.is_zero_period:
-                style_data_row(sheet, row, col, col)
-                continue
             entry = entry_by_slot.get((day, spec.pair_number))
-            if spec.starts_pair and entry:
+            if spec.is_zero_period:
+                if entry:
+                    sheet.cell(
+                        row=row, column=col, value=_entry_text(entry)
+                    ).alignment = CENTER
+            elif spec.starts_pair and entry:
                 sheet.merge_cells(
                     start_row=row, start_column=col, end_row=row + 1, end_column=col
                 )

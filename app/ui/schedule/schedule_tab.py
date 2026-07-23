@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 from app.export.excel_schedule import export_schedule as export_schedule_excel
 from app.export.pdf_schedule import export_schedule as export_schedule_pdf
 from app.repositories.academic_years import list_academic_years
+from app.repositories.bell_times import get_zero_period
 from app.repositories.auto_schedule import (
     generate_group_semester_schedule,
     regenerate_week,
@@ -81,7 +82,7 @@ class ScheduleTab(QWidget):
         actions_row.addWidget(regenerate_week_button)
         actions_row.addStretch()
 
-        self.table = QTableWidget(5, len(DAYS))
+        self.table = QTableWidget(6, len(DAYS))
         self.table.setHorizontalHeaderLabels(DAYS)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.verticalHeader().setMinimumSectionSize(64)
@@ -103,7 +104,9 @@ class ScheduleTab(QWidget):
         self.refresh_reference_data()
 
     def _update_pair_labels(self) -> None:
-        self.table.setVerticalHeaderLabels([f"Пара {n}" for n in range(1, 6)])
+        self.table.setVerticalHeaderLabels(
+            ["0 пара"] + [f"Пара {n}" for n in range(1, 6)]
+        )
 
     def refresh_reference_data(self) -> None:
         self._update_pair_labels()
@@ -171,7 +174,7 @@ class ScheduleTab(QWidget):
             if entry.substitute_teacher_id:
                 text += " (замена)"
             item = QTableWidgetItem(text)
-            self.table.setItem(entry.pair_number - 1, entry.day_of_week - 1, item)
+            self.table.setItem(entry.pair_number, entry.day_of_week - 1, item)
         self.table.resizeRowsToContents()
 
         hours = week_hours_for_group(group_id, week_id)
@@ -198,7 +201,18 @@ class ScheduleTab(QWidget):
             return
 
         day_of_week = column + 1
-        pair_number = row + 1
+        pair_number = row
+
+        if pair_number == 0:
+            zero_period = get_zero_period(day_of_week)
+            if not zero_period.enabled:
+                QMessageBox.information(
+                    self,
+                    "Нулевая пара выключена",
+                    "Для этого дня нулевая пара не включена в Настройки → Звонки.",
+                )
+                return
+
         entries = list_entries_for_group_week(group_id, week_id)
         current_entry = next(
             (

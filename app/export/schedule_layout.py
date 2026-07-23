@@ -8,13 +8,13 @@ DAY_LABELS = {1: "Пн", 2: "Вт", 3: "Ср", 4: "Чт", 5: "Пт", 6: "Сб"}
 
 @dataclass(frozen=True)
 class RowSpec:
-    pair_number: int | None
+    pair_number: int
     lesson_number: int | None
     time_label: str
 
     @property
     def is_zero_period(self) -> bool:
-        return self.pair_number is None
+        return self.pair_number == 0
 
     @property
     def starts_pair(self) -> bool:
@@ -29,7 +29,7 @@ def build_block_rows(days: tuple[int, ...]) -> list[RowSpec]:
         (zp for zp in (get_zero_period(day) for day in days) if zp.enabled), None
     )
     if zero_period:
-        rows.append(RowSpec(None, None, zero_period.label))
+        rows.append(RowSpec(0, None, zero_period.label))
 
     lessons_by_pair: dict[int, dict[int, str]] = {}
     for lesson in list_lessons(reference_day):
