@@ -13,6 +13,7 @@ PAGE_STYLE = """
     .subtitle { font-size: 14px; margin-bottom: 12px; }
     th { background-color: #4472C4; color: #ffffff; padding: 7px; text-align: center; }
     td { padding: 7px; text-align: left; }
+    td.room { padding: 7px 2px; text-align: center; font-size: 11px; }
     tr.even td { background-color: #F2F5FB; }
     tr.over-limit td { background-color: #F8CBAD; font-weight: bold; }
     .summary { margin: 10px 0; padding: 10px; background-color: #D9E2F3; }

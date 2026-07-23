@@ -1,12 +1,11 @@
 from app.export.pdf_common import content_width_px, render_html_to_pdf, table_tag
 from app.export.schedule_layout import DAY_LABELS, blocks_for_week, build_block_rows
 from app.repositories.schedule import ScheduleEntry
-from app.repositories.teachers import list_teachers
 from app.repositories.text_format import abbreviate_name
 
 # Пара, Звонки, затем на каждый день: контент + Каб
 COLUMN_WIDTHS_BASE = [4, 12]
-DAY_PAIR_WIDTHS = [23, 5]
+DAY_PAIR_WIDTHS = [25, 3]
 
 
 def export_schedule(
@@ -33,7 +32,6 @@ def build_week_html(
 ) -> str:
     width = content_width_px(landscape=False)
     entry_by_slot = {(e.day_of_week, e.pair_number): e for e in entries}
-    teacher_colors = {t.id: t.color for t in list_teachers()}
     blocks = blocks_for_week(includes_saturday)
 
     date_line = (
@@ -47,7 +45,6 @@ def build_week_html(
             days,
             entry_by_slot,
             width,
-            teacher_colors,
             index > 0 or force_page_break_first,
         )
         for index, days in enumerate(blocks)
@@ -64,7 +61,6 @@ def _build_block_html(
     days: tuple[int, ...],
     entry_by_slot: dict,
     width: int,
-    teacher_colors: dict,
     page_break_before: bool,
 ) -> str:
     column_widths = COLUMN_WIDTHS_BASE + DAY_PAIR_WIDTHS * len(days)
@@ -87,11 +83,11 @@ def _build_block_html(
         for day in days:
             entry = entry_by_slot.get((day, spec.pair_number))
             if spec.is_zero_period:
-                content_cell, room_cell = _cells(entry, teacher_colors)
+                content_cell, room_cell = _cells(entry)
                 cells.append(content_cell)
                 cells.append(room_cell)
             elif spec.starts_pair:
-                content_cell, room_cell = _cells(entry, teacher_colors, rowspan=2)
+                content_cell, room_cell = _cells(entry, rowspan=2)
                 cells.append(content_cell)
                 cells.append(room_cell)
             # second урок row: content/room already covered by rowspan above
@@ -108,17 +104,13 @@ def _build_block_html(
     """
 
 
-def _cells(
-    entry: ScheduleEntry | None, teacher_colors: dict, rowspan: int = 1
-) -> tuple[str, str]:
+def _cells(entry: ScheduleEntry | None, rowspan: int = 1) -> tuple[str, str]:
     span = f" rowspan='{rowspan}'" if rowspan > 1 else ""
     if entry is None:
-        return f"<td{span}>&nbsp;</td>", f"<td{span}>&nbsp;</td>"
-    color = teacher_colors.get(entry.effective_teacher_id)
-    style = f" style='background-color:{color};'" if color else ""
+        return f"<td{span}>&nbsp;</td>", f"<td{span} class='room'>&nbsp;</td>"
     content = _cell_text(entry)
     room = entry.room or ""
-    return f"<td{span}{style}>{content}</td>", f"<td{span}{style}>{room}</td>"
+    return f"<td{span}>{content}</td>", f"<td{span} class='room'>{room}</td>"
 
 
 def _cell_text(entry: ScheduleEntry) -> str:

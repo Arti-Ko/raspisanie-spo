@@ -1,5 +1,5 @@
 from openpyxl import Workbook
-from openpyxl.styles import Alignment, PatternFill
+from openpyxl.styles import Alignment
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.pagebreak import Break
 
@@ -11,7 +11,6 @@ from app.export.excel_styles import (
 )
 from app.export.schedule_layout import DAY_LABELS, blocks_for_week, build_block_rows
 from app.repositories.schedule import ScheduleEntry
-from app.repositories.teachers import list_teachers
 from app.repositories.text_format import abbreviate_name
 
 CENTER = Alignment(horizontal="center", vertical="center", wrap_text=True)
@@ -29,7 +28,6 @@ def export_schedule(
     sheet = workbook.active
     sheet.title = "Расписание"
     entry_by_slot = {(e.day_of_week, e.pair_number): e for e in entries}
-    teacher_colors = {t.id: t.color for t in list_teachers()}
     blocks = blocks_for_week(includes_saturday)
     max_columns = 2 + 2 * max(len(days) for days in blocks)
 
@@ -48,15 +46,15 @@ def export_schedule(
 
     row += 1
     for days in blocks:
-        row = write_block(sheet, row, days, entry_by_slot, teacher_colors)
+        row = write_block(sheet, row, days, entry_by_slot)
         sheet.row_breaks.append(Break(id=row))
         row += 2
 
     sheet.column_dimensions["A"].width = 6
     sheet.column_dimensions["B"].width = 13
     for col_index in range(3, max_columns + 1, 2):
-        sheet.column_dimensions[get_column_letter(col_index)].width = 24
-        sheet.column_dimensions[get_column_letter(col_index + 1)].width = 6
+        sheet.column_dimensions[get_column_letter(col_index)].width = 26
+        sheet.column_dimensions[get_column_letter(col_index + 1)].width = 4
 
     workbook.save(file_path)
 
@@ -66,7 +64,6 @@ def write_block(
     start_row: int,
     days: tuple[int, ...],
     entry_by_slot: dict,
-    teacher_colors: dict,
 ) -> int:
     block_columns = 2 + 2 * len(days)
     title = " – ".join(DAY_LABELS[day] for day in (days[0], days[-1]))
@@ -106,22 +103,16 @@ def write_block(
             room_col = content_col + 1
             entry = entry_by_slot.get((day, spec.pair_number))
             if spec.is_zero_period:
-                _write_entry(
-                    sheet, row, row, content_col, room_col, entry, teacher_colors
-                )
+                _write_entry(sheet, row, row, content_col, room_col, entry)
             elif spec.starts_pair:
-                _write_entry(
-                    sheet, row, row + 1, content_col, room_col, entry, teacher_colors
-                )
+                _write_entry(sheet, row, row + 1, content_col, room_col, entry)
         style_data_row(sheet, row, 1, block_columns)
         sheet.row_dimensions[row].height = 30
 
     return header_row + len(rows)
 
 
-def _write_entry(
-    sheet, row_start, row_end, content_col, room_col, entry, teacher_colors
-) -> None:
+def _write_entry(sheet, row_start, row_end, content_col, room_col, entry) -> None:
     if row_end > row_start:
         sheet.merge_cells(
             start_row=row_start,
@@ -143,11 +134,6 @@ def _write_entry(
     subject_cell.alignment = CENTER
     room_cell = sheet.cell(row=row_start, column=room_col, value=entry.room or "")
     room_cell.alignment = CENTER
-    color = teacher_colors.get(entry.effective_teacher_id)
-    if color:
-        fill = PatternFill("solid", fgColor=color.lstrip("#"))
-        subject_cell.fill = fill
-        room_cell.fill = fill
 
 
 def _entry_text(entry: ScheduleEntry) -> str:

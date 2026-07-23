@@ -8,7 +8,6 @@ from app.export.schedule_layout import blocks_for_week
 from app.repositories.calendar_weeks import CalendarWeek
 from app.repositories.groups import Group
 from app.repositories.schedule import ScheduleEntry
-from app.repositories.teachers import list_teachers
 
 MAX_SHEET_NAME = 31
 
@@ -22,7 +21,6 @@ def export_semester_schedule(
 ) -> None:
     workbook = Workbook()
     workbook.remove(workbook.active)
-    teacher_colors = {t.id: t.color for t in list_teachers()}
     max_columns = 2 + 2 * 3
 
     for group in groups:
@@ -48,7 +46,7 @@ def export_semester_schedule(
             row += 1
 
             for days in blocks_for_week(week.includes_saturday):
-                row = write_block(sheet, row, days, entry_by_slot, teacher_colors)
+                row = write_block(sheet, row, days, entry_by_slot)
                 sheet.row_breaks.append(Break(id=row))
                 row += 2
             row += 1
@@ -56,7 +54,7 @@ def export_semester_schedule(
         sheet.column_dimensions["A"].width = 6
         sheet.column_dimensions["B"].width = 13
         for col_index in range(3, max_columns + 1, 2):
-            sheet.column_dimensions[get_column_letter(col_index)].width = 24
-            sheet.column_dimensions[get_column_letter(col_index + 1)].width = 6
+            sheet.column_dimensions[get_column_letter(col_index)].width = 26
+            sheet.column_dimensions[get_column_letter(col_index + 1)].width = 4
 
     workbook.save(file_path)
