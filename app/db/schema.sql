@@ -57,18 +57,44 @@ CREATE TABLE IF NOT EXISTS curriculum_items (
     UNIQUE (program_id, course, semester, subject_id)
 );
 
-CREATE TABLE IF NOT EXISTS bell_times (
-    pair_number INTEGER PRIMARY KEY,
-    start_time TEXT NOT NULL,
-    end_time TEXT NOT NULL
+CREATE TABLE IF NOT EXISTS bell_schedule_days (
+    day_of_week INTEGER PRIMARY KEY CHECK (day_of_week BETWEEN 1 AND 6),
+    has_zero_period INTEGER NOT NULL DEFAULT 0,
+    zero_period_start TEXT,
+    zero_period_end TEXT
 );
 
-INSERT OR IGNORE INTO bell_times (pair_number, start_time, end_time) VALUES
-    (1, '08:30', '10:00'),
-    (2, '10:10', '11:40'),
-    (3, '11:50', '13:20'),
-    (4, '13:50', '15:20'),
-    (5, '15:30', '17:00');
+CREATE TABLE IF NOT EXISTS bell_schedule_lessons (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    day_of_week INTEGER NOT NULL CHECK (day_of_week BETWEEN 1 AND 6),
+    pair_number INTEGER NOT NULL CHECK (pair_number BETWEEN 1 AND 5),
+    lesson_number INTEGER NOT NULL CHECK (lesson_number IN (1, 2)),
+    start_time TEXT NOT NULL,
+    end_time TEXT NOT NULL,
+    UNIQUE (day_of_week, pair_number, lesson_number)
+);
+
+DROP TABLE IF EXISTS bell_times;
+
+INSERT OR IGNORE INTO bell_schedule_days (day_of_week, has_zero_period, zero_period_start, zero_period_end)
+    SELECT d.day, 0, NULL, NULL
+    FROM (SELECT 1 AS day UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6) d;
+
+INSERT OR IGNORE INTO bell_schedule_lessons (day_of_week, pair_number, lesson_number, start_time, end_time)
+    SELECT d.day, p.pair_number, p.lesson_number, p.start_time, p.end_time
+    FROM (SELECT 1 AS day UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6) d
+    CROSS JOIN (
+        SELECT 1 AS pair_number, 1 AS lesson_number, '08:10' AS start_time, '08:55' AS end_time UNION ALL
+        SELECT 1, 2, '09:00', '09:45' UNION ALL
+        SELECT 2, 1, '09:55', '10:40' UNION ALL
+        SELECT 2, 2, '10:45', '11:30' UNION ALL
+        SELECT 3, 1, '12:00', '12:45' UNION ALL
+        SELECT 3, 2, '12:50', '13:35' UNION ALL
+        SELECT 4, 1, '13:45', '14:30' UNION ALL
+        SELECT 4, 2, '14:35', '15:20' UNION ALL
+        SELECT 5, 1, '15:30', '16:15' UNION ALL
+        SELECT 5, 2, '16:20', '17:05'
+    ) p;
 
 CREATE TABLE IF NOT EXISTS teacher_assignments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

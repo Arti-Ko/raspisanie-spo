@@ -20,7 +20,6 @@ from app.repositories.auto_schedule import (
     generate_group_semester_schedule,
     regenerate_week,
 )
-from app.repositories.bell_times import list_bell_times
 from app.repositories.calendar_weeks import list_weeks
 from app.repositories.groups import list_groups
 from app.repositories.schedule import (
@@ -104,17 +103,7 @@ class ScheduleTab(QWidget):
         self.refresh_reference_data()
 
     def _update_pair_labels(self) -> None:
-        labels = []
-        for bell_time in list_bell_times():
-            labels.append(f"Пара {bell_time.pair_number}\n{bell_time.label}")
-        if not labels:
-            labels = [f"Пара {n}" for n in range(1, 6)]
-        self.table.setVerticalHeaderLabels(labels)
-
-    def _bell_times_map(self) -> dict[int, str]:
-        return {
-            bell_time.pair_number: bell_time.label for bell_time in list_bell_times()
-        }
+        self.table.setVerticalHeaderLabels([f"Пара {n}" for n in range(1, 6)])
 
     def refresh_reference_data(self) -> None:
         self._update_pair_labels()
@@ -380,13 +369,7 @@ class ScheduleTab(QWidget):
             return
         try:
             export_schedule_excel(
-                group_name,
-                week_label,
-                entries,
-                hours,
-                limit,
-                file_path,
-                self._bell_times_map(),
+                group_name, week_label, entries, hours, limit, file_path
             )
         except OSError as error:
             QMessageBox.warning(self, "Ошибка экспорта", str(error))
@@ -407,13 +390,7 @@ class ScheduleTab(QWidget):
             return
         try:
             export_schedule_pdf(
-                group_name,
-                week_label,
-                entries,
-                hours,
-                limit,
-                file_path,
-                self._bell_times_map(),
+                group_name, week_label, entries, hours, limit, file_path
             )
         except OSError as error:
             QMessageBox.warning(self, "Ошибка экспорта", str(error))
