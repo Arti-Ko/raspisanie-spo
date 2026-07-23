@@ -1,66 +1,77 @@
 from openpyxl import Workbook
-from openpyxl.styles import Alignment
+from openpyxl.styles import Alignment, PatternFill
+from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.pagebreak import Break
 
 from app.export.excel_styles import (
-    OVER_LIMIT_FILL,
     SUBTITLE_FONT,
     TITLE_FONT,
     style_data_row,
     style_header_row,
 )
-from app.export.schedule_layout import BLOCKS, DAY_LABELS, build_block_rows
+from app.export.schedule_layout import DAY_LABELS, blocks_for_week, build_block_rows
 from app.repositories.schedule import ScheduleEntry
+from app.repositories.teachers import list_teachers
+from app.repositories.text_format import abbreviate_name
 
 CENTER = Alignment(horizontal="center", vertical="center", wrap_text=True)
-BLOCK_COLUMNS = 5  # Пара, Время, + 3 дня
 
 
 def export_schedule(
     group_name: str,
     week_label: str,
+    date_range_label: str,
     entries: list[ScheduleEntry],
-    hours: int,
-    hours_limit: int | None,
+    includes_saturday: bool,
     file_path: str,
 ) -> None:
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Расписание"
     entry_by_slot = {(e.day_of_week, e.pair_number): e for e in entries}
+    teacher_colors = {t.id: t.color for t in list_teachers()}
+    blocks = blocks_for_week(includes_saturday)
+    max_columns = 2 + 2 * max(len(days) for days in blocks)
 
-    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=BLOCK_COLUMNS)
+    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=max_columns)
     sheet.cell(
         row=1, column=1, value=f"Расписание группы {group_name} — {week_label}"
     ).font = TITLE_FONT
 
-    limit_text = f" / лимит {hours_limit} ч." if hours_limit is not None else ""
-    sheet.merge_cells(start_row=2, start_column=1, end_row=2, end_column=BLOCK_COLUMNS)
-    hours_cell = sheet.cell(
-        row=2, column=1, value=f"Часов на неделе: {hours}{limit_text}"
-    )
-    hours_cell.font = SUBTITLE_FONT
-    if hours_limit is not None and hours > hours_limit:
-        hours_cell.fill = OVER_LIMIT_FILL
+    row = 2
+    if date_range_label:
+        sheet.merge_cells(
+            start_row=row, start_column=1, end_row=row, end_column=max_columns
+        )
+        sheet.cell(row=row, column=1, value=f"Даты: {date_range_label}")
+        row += 1
 
-    row = 4
-    for days in BLOCKS:
-        row = _write_block(sheet, row, days, entry_by_slot)
+    row += 1
+    for days in blocks:
+        row = write_block(sheet, row, days, entry_by_slot, teacher_colors)
+        sheet.row_breaks.append(Break(id=row))
         row += 2
 
     sheet.column_dimensions["A"].width = 6
     sheet.column_dimensions["B"].width = 13
-    for col_letter in "CDE":
-        sheet.column_dimensions[col_letter].width = 24
+    for col_index in range(3, max_columns + 1, 2):
+        sheet.column_dimensions[get_column_letter(col_index)].width = 24
+        sheet.column_dimensions[get_column_letter(col_index + 1)].width = 6
 
     workbook.save(file_path)
 
 
-def _write_block(
-    sheet, start_row: int, days: tuple[int, ...], entry_by_slot: dict
+def write_block(
+    sheet,
+    start_row: int,
+    days: tuple[int, ...],
+    entry_by_slot: dict,
+    teacher_colors: dict,
 ) -> int:
+    block_columns = 2 + 2 * len(days)
     title = " – ".join(DAY_LABELS[day] for day in (days[0], days[-1]))
     sheet.merge_cells(
-        start_row=start_row, start_column=1, end_row=start_row, end_column=BLOCK_COLUMNS
+        start_row=start_row, start_column=1, end_row=start_row, end_column=block_columns
     )
     sheet.cell(row=start_row, column=1, value=title).font = SUBTITLE_FONT
 
@@ -68,8 +79,10 @@ def _write_block(
     sheet.cell(row=header_row, column=1, value="Пара")
     sheet.cell(row=header_row, column=2, value="Время")
     for col_offset, day in enumerate(days):
-        sheet.cell(row=header_row, column=3 + col_offset, value=DAY_LABELS[day])
-    style_header_row(sheet, header_row, 1, BLOCK_COLUMNS)
+        col = 3 + col_offset * 2
+        sheet.cell(row=header_row, column=col, value=DAY_LABELS[day])
+        sheet.cell(row=header_row, column=col + 1, value="Каб")
+    style_header_row(sheet, header_row, 1, block_columns)
 
     rows = build_block_rows(days)
     pair_merge_start: dict[int, int] = {}
@@ -89,30 +102,57 @@ def _write_block(
             )
 
         for col_offset, day in enumerate(days):
-            col = 3 + col_offset
+            content_col = 3 + col_offset * 2
+            room_col = content_col + 1
             entry = entry_by_slot.get((day, spec.pair_number))
             if spec.is_zero_period:
-                if entry:
-                    sheet.cell(
-                        row=row, column=col, value=_entry_text(entry)
-                    ).alignment = CENTER
-            elif spec.starts_pair and entry:
-                sheet.merge_cells(
-                    start_row=row, start_column=col, end_row=row + 1, end_column=col
+                _write_entry(
+                    sheet, row, row, content_col, room_col, entry, teacher_colors
                 )
-                sheet.cell(row=row, column=col, value=_entry_text(entry)).alignment = (
-                    CENTER
+            elif spec.starts_pair:
+                _write_entry(
+                    sheet, row, row + 1, content_col, room_col, entry, teacher_colors
                 )
-        style_data_row(sheet, row, 1, BLOCK_COLUMNS)
+        style_data_row(sheet, row, 1, block_columns)
         sheet.row_dimensions[row].height = 30
 
     return header_row + len(rows)
 
 
+def _write_entry(
+    sheet, row_start, row_end, content_col, room_col, entry, teacher_colors
+) -> None:
+    if row_end > row_start:
+        sheet.merge_cells(
+            start_row=row_start,
+            start_column=content_col,
+            end_row=row_end,
+            end_column=content_col,
+        )
+        sheet.merge_cells(
+            start_row=row_start,
+            start_column=room_col,
+            end_row=row_end,
+            end_column=room_col,
+        )
+    if entry is None:
+        return
+    subject_cell = sheet.cell(
+        row=row_start, column=content_col, value=_entry_text(entry)
+    )
+    subject_cell.alignment = CENTER
+    room_cell = sheet.cell(row=row_start, column=room_col, value=entry.room or "")
+    room_cell.alignment = CENTER
+    color = teacher_colors.get(entry.effective_teacher_id)
+    if color:
+        fill = PatternFill("solid", fgColor=color.lstrip("#"))
+        subject_cell.fill = fill
+        room_cell.fill = fill
+
+
 def _entry_text(entry: ScheduleEntry) -> str:
-    text = f"{entry.subject_name}\n{entry.effective_teacher_name}"
-    if entry.room:
-        text += f"\nкаб. {entry.room}"
+    name = abbreviate_name(entry.effective_teacher_name)
+    text = f"{entry.subject_name}\n{name}"
     if entry.substitute_teacher_id:
         text += " (замена)"
     return text

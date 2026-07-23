@@ -1,52 +1,74 @@
 from app.export.pdf_common import content_width_px, render_html_to_pdf, table_tag
-from app.export.schedule_layout import BLOCKS, DAY_LABELS, build_block_rows
+from app.export.schedule_layout import DAY_LABELS, blocks_for_week, build_block_rows
 from app.repositories.schedule import ScheduleEntry
+from app.repositories.teachers import list_teachers
+from app.repositories.text_format import abbreviate_name
 
-COLUMN_WIDTHS = [6, 14, 26.67, 26.67, 26.66]
+# Пара, Звонки, затем на каждый день: контент + Каб
+COLUMN_WIDTHS_BASE = [4, 12]
+DAY_PAIR_WIDTHS = [23, 5]
 
 
 def export_schedule(
     group_name: str,
     week_label: str,
+    date_range_label: str,
     entries: list[ScheduleEntry],
-    hours: int,
-    hours_limit: int | None,
+    includes_saturday: bool,
     file_path: str,
 ) -> None:
-    html = _build_html(group_name, week_label, entries, hours, hours_limit)
+    html = build_week_html(
+        group_name, week_label, date_range_label, entries, includes_saturday
+    )
     render_html_to_pdf(html, file_path, landscape=False)
 
 
-def _build_html(
+def build_week_html(
     group_name: str,
     week_label: str,
+    date_range_label: str,
     entries: list[ScheduleEntry],
-    hours: int,
-    hours_limit: int | None,
+    includes_saturday: bool,
+    force_page_break_first: bool = False,
 ) -> str:
     width = content_width_px(landscape=False)
     entry_by_slot = {(e.day_of_week, e.pair_number): e for e in entries}
+    teacher_colors = {t.id: t.color for t in list_teachers()}
+    blocks = blocks_for_week(includes_saturday)
 
-    limit_text = f" / лимит {hours_limit} ч." if hours_limit is not None else ""
-    over_class = (
-        " over-limit" if hours_limit is not None and hours > hours_limit else ""
+    date_line = (
+        f"<div class='subtitle'>Даты: {date_range_label}</div>"
+        if date_range_label
+        else ""
     )
 
     blocks_html = "".join(
-        _build_block_html(days, entry_by_slot, width) for days in BLOCKS
+        _build_block_html(
+            days,
+            entry_by_slot,
+            width,
+            teacher_colors,
+            index > 0 or force_page_break_first,
+        )
+        for index, days in enumerate(blocks)
     )
 
     return f"""
-    <h1>Расписание группы {group_name}</h1>
-    <div class="subtitle">{week_label}</div>
-    <div class="summary{over_class}">Часов на неделе: {hours}{limit_text}</div>
+    <h1>Расписание группы {group_name} — {week_label}</h1>
+    {date_line}
     {blocks_html}
     """
 
 
-def _build_block_html(days: tuple[int, ...], entry_by_slot: dict, width: int) -> str:
-    title = " – ".join(DAY_LABELS[day] for day in (days[0], days[-1]))
-    header_cells = "".join(f"<th>{DAY_LABELS[day]}</th>" for day in days)
+def _build_block_html(
+    days: tuple[int, ...],
+    entry_by_slot: dict,
+    width: int,
+    teacher_colors: dict,
+    page_break_before: bool,
+) -> str:
+    column_widths = COLUMN_WIDTHS_BASE + DAY_PAIR_WIDTHS * len(days)
+    header_cells = "".join(f"<th>{DAY_LABELS[day]}</th><th>Каб</th>" for day in days)
 
     rows = build_block_rows(days)
     body_rows = []
@@ -65,28 +87,43 @@ def _build_block_html(days: tuple[int, ...], entry_by_slot: dict, width: int) ->
         for day in days:
             entry = entry_by_slot.get((day, spec.pair_number))
             if spec.is_zero_period:
-                content = _cell_text(entry) if entry else "&nbsp;"
-                cells.append(f"<td>{content}</td>")
+                content_cell, room_cell = _cells(entry, teacher_colors)
+                cells.append(content_cell)
+                cells.append(room_cell)
             elif spec.starts_pair:
-                content = _cell_text(entry) if entry else "&nbsp;"
-                cells.append(f"<td rowspan='2'>{content}</td>")
-            # second урок row: cell already covered by rowspan above, emit nothing
+                content_cell, room_cell = _cells(entry, teacher_colors, rowspan=2)
+                cells.append(content_cell)
+                cells.append(room_cell)
+            # second урок row: content/room already covered by rowspan above
 
         body_rows.append(f"<tr class='{css_class}'>{''.join(cells)}</tr>")
 
+    page_break = " style='page-break-before: always;'" if page_break_before else ""
     return f"""
-    <h2>{title}</h2>
-    {table_tag(width, COLUMN_WIDTHS)}
-        <tr><th>Пара</th><th>Время</th>{header_cells}</tr>
+    <div{page_break}></div>
+    {table_tag(width, column_widths)}
+        <tr><th>&nbsp;</th><th>&nbsp;</th>{header_cells}</tr>
         {"".join(body_rows)}
     </table>
     """
 
 
+def _cells(
+    entry: ScheduleEntry | None, teacher_colors: dict, rowspan: int = 1
+) -> tuple[str, str]:
+    span = f" rowspan='{rowspan}'" if rowspan > 1 else ""
+    if entry is None:
+        return f"<td{span}>&nbsp;</td>", f"<td{span}>&nbsp;</td>"
+    color = teacher_colors.get(entry.effective_teacher_id)
+    style = f" style='background-color:{color};'" if color else ""
+    content = _cell_text(entry)
+    room = entry.room or ""
+    return f"<td{span}{style}>{content}</td>", f"<td{span}{style}>{room}</td>"
+
+
 def _cell_text(entry: ScheduleEntry) -> str:
-    text = f"<b>{entry.subject_name}</b><br>{entry.effective_teacher_name}"
-    if entry.room:
-        text += f"<br>каб. {entry.room}"
+    name = abbreviate_name(entry.effective_teacher_name)
+    text = f"<b>{entry.subject_name}</b><br><i>{name}</i>"
     if entry.substitute_teacher_id:
         text += " <i>(замена)</i>"
     return text

@@ -1,5 +1,7 @@
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
+    QColorDialog,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -14,7 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from app.repositories.subjects import get_or_create_subject, list_subjects
-from app.repositories.teachers import Teacher
+from app.repositories.teachers import COLOR_PALETTE, Teacher
 
 
 class TeacherDialog(QDialog):
@@ -28,6 +30,12 @@ class TeacherDialog(QDialog):
 
         self.name_edit = QLineEdit(teacher.full_name if teacher else "")
         self.room_edit = QLineEdit(teacher.room if teacher else "")
+
+        self._color = teacher.color if teacher else COLOR_PALETTE[0]
+        self.color_button = QPushButton()
+        self.color_button.setFixedWidth(60)
+        self.color_button.clicked.connect(self._pick_color)
+        self._update_color_button()
 
         self.subjects_list = QListWidget()
         self._reload_subjects(
@@ -45,6 +53,7 @@ class TeacherDialog(QDialog):
         form = QFormLayout()
         form.addRow("ФИО*", self.name_edit)
         form.addRow("Кабинет", self.room_edit)
+        form.addRow("Цвет", self.color_button)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._on_accept)
@@ -56,6 +65,17 @@ class TeacherDialog(QDialog):
         layout.addWidget(self.subjects_list)
         layout.addLayout(new_subject_row)
         layout.addWidget(buttons)
+
+    def _update_color_button(self) -> None:
+        self.color_button.setStyleSheet(
+            f"background-color: {self._color}; border: 1px solid #888;"
+        )
+
+    def _pick_color(self) -> None:
+        color = QColorDialog.getColor(QColor(self._color), self, "Цвет преподавателя")
+        if color.isValid():
+            self._color = color.name()
+            self._update_color_button()
 
     def _reload_subjects(self, checked_ids: set[int]) -> None:
         self.subjects_list.clear()
@@ -91,9 +111,10 @@ class TeacherDialog(QDialog):
             return
         self.accept()
 
-    def values(self) -> tuple[str, str, list[int]]:
+    def values(self) -> tuple[str, str, list[int], str]:
         return (
             self.name_edit.text().strip(),
             self.room_edit.text().strip(),
             list(self._checked_subject_ids()),
+            self._color,
         )

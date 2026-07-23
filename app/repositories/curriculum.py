@@ -11,7 +11,7 @@ LESSON_TYPE_LABELS = {
 
 _COLUMNS = """
     ci.id, ci.program_id, ci.course, ci.semester, ci.subject_id, s.name AS subject_name,
-    ci.hours_theory, ci.hours_practice, ci.hours_exam, ci.lesson_type
+    ci.hours_theory, ci.hours_practice, ci.hours_exam, ci.lesson_type, ci.is_double_pair
 """
 
 
@@ -27,6 +27,7 @@ class CurriculumItem:
     hours_practice: int
     hours_exam: int
     lesson_type: str
+    is_double_pair: bool
 
     @property
     def total_hours(self) -> int:
@@ -49,6 +50,7 @@ def _row_to_item(row) -> CurriculumItem:
         row["hours_practice"],
         row["hours_exam"],
         row["lesson_type"],
+        bool(row["is_double_pair"]),
     )
 
 
@@ -96,14 +98,16 @@ def add_curriculum_item(
     hours_practice: int,
     hours_exam: int,
     lesson_type: str = "theory",
+    is_double_pair: bool = False,
 ) -> int:
     conn = get_connection()
     try:
         cursor = conn.execute(
             """
             INSERT INTO curriculum_items
-                (program_id, course, semester, subject_id, hours_theory, hours_practice, hours_exam, lesson_type)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (program_id, course, semester, subject_id, hours_theory, hours_practice, hours_exam,
+                 lesson_type, is_double_pair)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 program_id,
@@ -114,6 +118,7 @@ def add_curriculum_item(
                 hours_practice,
                 hours_exam,
                 lesson_type,
+                int(is_double_pair),
             ),
         )
         conn.commit()
@@ -130,13 +135,15 @@ def update_curriculum_item(
     hours_practice: int,
     hours_exam: int,
     lesson_type: str = "theory",
+    is_double_pair: bool = False,
 ) -> None:
     conn = get_connection()
     try:
         conn.execute(
             """
             UPDATE curriculum_items
-            SET semester = ?, subject_id = ?, hours_theory = ?, hours_practice = ?, hours_exam = ?, lesson_type = ?
+            SET semester = ?, subject_id = ?, hours_theory = ?, hours_practice = ?, hours_exam = ?,
+                lesson_type = ?, is_double_pair = ?
             WHERE id = ?
             """,
             (
@@ -146,6 +153,7 @@ def update_curriculum_item(
                 hours_practice,
                 hours_exam,
                 lesson_type,
+                int(is_double_pair),
                 item_id,
             ),
         )

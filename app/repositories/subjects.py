@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from app.db.database import get_connection
+from app.repositories.text_format import capitalize_first
 
 
 @dataclass(frozen=True)
@@ -19,14 +20,19 @@ def list_subjects() -> list[Subject]:
 
 
 def get_or_create_subject(name: str) -> Subject:
-    name = name.strip()
+    name = capitalize_first(name)
     conn = get_connection()
     try:
         row = conn.execute(
-            "SELECT id, name FROM subjects WHERE name = ?", (name,)
+            "SELECT id, name FROM subjects WHERE name = ? COLLATE NOCASE", (name,)
         ).fetchone()
         if row:
-            return Subject(row["id"], row["name"])
+            if row["name"] != name:
+                conn.execute(
+                    "UPDATE subjects SET name = ? WHERE id = ?", (name, row["id"])
+                )
+                conn.commit()
+            return Subject(row["id"], name)
         cursor = conn.execute("INSERT INTO subjects (name) VALUES (?)", (name,))
         conn.commit()
         return Subject(cursor.lastrowid, name)

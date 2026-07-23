@@ -1,4 +1,5 @@
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -61,6 +62,12 @@ class CurriculumItemDialog(QDialog):
         self.exam_spin.setRange(0, 200)
         self.exam_spin.setValue(item.hours_exam if item else 0)
 
+        self.double_pair_check = QCheckBox(
+            "Двойная пара (часы удваиваются; ставится всегда первой и последней парой одного дня)"
+        )
+        self.double_pair_check.setChecked(item.is_double_pair if item else False)
+        self.double_pair_check.toggled.connect(self._on_double_pair_toggled)
+
         form = QFormLayout()
         form.addRow("Полугодие*", self.semester_combo)
         form.addRow("Предмет*", self.subject_combo)
@@ -69,6 +76,7 @@ class CurriculumItemDialog(QDialog):
         form.addRow("Часов теории", self.theory_spin)
         form.addRow("Часов практики", self.practice_spin)
         form.addRow("Часов экзамена", self.exam_spin)
+        form.addRow("", self.double_pair_check)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._on_accept)
@@ -77,6 +85,11 @@ class CurriculumItemDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addLayout(form)
         layout.addWidget(buttons)
+
+    def _on_double_pair_toggled(self, checked: bool) -> None:
+        factor = 2 if checked else 0.5
+        for spin in (self.theory_spin, self.practice_spin, self.exam_spin):
+            spin.setValue(round(spin.value() * factor))
 
     def _reload_subjects(self, selected_subject_id: int | None) -> None:
         self.subject_combo.clear()
@@ -120,7 +133,7 @@ class CurriculumItemDialog(QDialog):
             return
         self.accept()
 
-    def values(self) -> tuple[int, int, int, int, int, str]:
+    def values(self) -> tuple[int, int, int, int, int, str, bool]:
         return (
             self.semester_combo.currentData(),
             self.subject_combo.currentData(),
@@ -128,4 +141,5 @@ class CurriculumItemDialog(QDialog):
             self.practice_spin.value(),
             self.exam_spin.value(),
             self.lesson_type_combo.currentData(),
+            self.double_pair_check.isChecked(),
         )

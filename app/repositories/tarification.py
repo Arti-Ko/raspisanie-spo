@@ -16,6 +16,7 @@ class Assignment:
     natural_hours: int
     transferred_hours: int
     lesson_type: str
+    is_double_pair: bool
 
     @property
     def hours_in_natural_semester(self) -> int:
@@ -32,7 +33,7 @@ _ASSIGNMENT_SELECT = """
         a.group_id, g.name AS group_name,
         a.curriculum_item_id, s.name AS subject_name, ci.semester,
         (ci.hours_theory + ci.hours_practice + ci.hours_exam) AS natural_hours,
-        a.transferred_hours, ci.lesson_type
+        a.transferred_hours, ci.lesson_type, ci.is_double_pair
     FROM teacher_assignments a
     JOIN teachers t ON t.id = a.teacher_id
     JOIN groups g ON g.id = a.group_id
@@ -54,6 +55,7 @@ def _row_to_assignment(row) -> Assignment:
         row["natural_hours"],
         row["transferred_hours"],
         row["lesson_type"],
+        bool(row["is_double_pair"]),
     )
 
 

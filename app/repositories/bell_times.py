@@ -10,7 +10,7 @@ DAY_NAMES = {
     5: "Пятница",
     6: "Суббота",
 }
-PAIR_NUMBERS = (1, 2, 3, 4, 5)
+PAIR_NUMBERS = (1, 2, 3, 4)
 LESSON_NUMBERS = (1, 2)
 
 

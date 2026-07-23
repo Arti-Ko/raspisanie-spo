@@ -1,3 +1,4 @@
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QHBoxLayout,
@@ -17,7 +18,7 @@ from app.repositories.teachers import (
 )
 from app.ui.settings.teacher_dialog import TeacherDialog
 
-COLUMNS = ["ФИО", "Кабинет", "Предметы"]
+COLUMNS = ["Цвет", "ФИО", "Кабинет", "Предметы"]
 
 
 class TeachersTab(QWidget):
@@ -56,11 +57,12 @@ class TeachersTab(QWidget):
         self.table.setRowCount(len(teachers))
         for row, teacher in enumerate(teachers):
             subjects_text = ", ".join(s.name for s in teacher.subjects)
-            self.table.setItem(
-                row, 0, self._readonly_item(teacher.full_name, teacher.id)
-            )
-            self.table.setItem(row, 1, self._readonly_item(teacher.room))
-            self.table.setItem(row, 2, self._readonly_item(subjects_text))
+            color_item = self._readonly_item("", teacher.id)
+            color_item.setBackground(QColor(teacher.color))
+            self.table.setItem(row, 0, color_item)
+            self.table.setItem(row, 1, self._readonly_item(teacher.full_name))
+            self.table.setItem(row, 2, self._readonly_item(teacher.room))
+            self.table.setItem(row, 3, self._readonly_item(subjects_text))
         self.table.resizeColumnsToContents()
 
     @staticmethod
@@ -79,8 +81,9 @@ class TeachersTab(QWidget):
     def _on_add(self) -> None:
         dialog = TeacherDialog(self)
         if dialog.exec():
-            full_name, room, subject_ids = dialog.values()
-            add_teacher(full_name, room, subject_ids)
+            full_name, room, subject_ids, color = dialog.values()
+            teacher_id = add_teacher(full_name, room, subject_ids)
+            update_teacher(teacher_id, full_name, room, subject_ids, color)
             self.refresh()
 
     def _on_edit(self) -> None:
@@ -93,8 +96,8 @@ class TeachersTab(QWidget):
         teacher = next(t for t in list_teachers() if t.id == teacher_id)
         dialog = TeacherDialog(self, teacher)
         if dialog.exec():
-            full_name, room, subject_ids = dialog.values()
-            update_teacher(teacher_id, full_name, room, subject_ids)
+            full_name, room, subject_ids, color = dialog.values()
+            update_teacher(teacher_id, full_name, room, subject_ids, color)
             self.refresh()
 
     def _on_delete(self) -> None:

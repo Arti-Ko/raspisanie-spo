@@ -1,5 +1,6 @@
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QFileDialog,
     QHBoxLayout,
@@ -14,14 +15,20 @@ from PySide6.QtWidgets import (
 )
 
 from app.export.excel_schedule import export_schedule as export_schedule_excel
+from app.export.excel_semester_schedule import (
+    export_semester_schedule as export_semester_excel,
+)
 from app.export.pdf_schedule import export_schedule as export_schedule_pdf
+from app.export.pdf_semester_schedule import (
+    export_semester_schedule as export_semester_pdf,
+)
 from app.repositories.academic_years import list_academic_years
-from app.repositories.bell_times import get_zero_period
 from app.repositories.auto_schedule import (
     generate_group_semester_schedule,
     regenerate_week,
 )
-from app.repositories.calendar_weeks import list_weeks
+from app.repositories.bell_times import get_zero_period
+from app.repositories.calendar_weeks import list_weeks, set_includes_saturday
 from app.repositories.groups import list_groups
 from app.repositories.schedule import (
     list_entries_for_group_week,
@@ -31,9 +38,10 @@ from app.repositories.schedule import (
     week_hours_for_group,
 )
 from app.repositories.tarification import list_assignments_for_group
+from app.repositories.text_format import abbreviate_name
 from app.ui.schedule.lesson_cell_dialog import LessonCellDialog
 
-DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб"]
+ALL_DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб"]
 
 
 class ScheduleTab(QWidget):
@@ -47,9 +55,12 @@ class ScheduleTab(QWidget):
         self.semester_combo.addItem("II полугодие", 2)
         self.semester_combo.currentIndexChanged.connect(self._reload_weeks)
         self.week_combo = QComboBox()
-        self.week_combo.currentIndexChanged.connect(self.refresh)
+        self.week_combo.currentIndexChanged.connect(self._on_week_changed)
         self.group_combo = QComboBox()
         self.group_combo.currentIndexChanged.connect(self.refresh)
+
+        self.saturday_check = QCheckBox("Суббота")
+        self.saturday_check.toggled.connect(self._on_saturday_toggled)
 
         excel_button = QPushButton("Экспорт в Excel")
         excel_button.clicked.connect(self._on_export_excel)
@@ -63,6 +74,7 @@ class ScheduleTab(QWidget):
         selector_row.addWidget(self.semester_combo)
         selector_row.addWidget(QLabel("Неделя:"))
         selector_row.addWidget(self.week_combo)
+        selector_row.addWidget(self.saturday_check)
         selector_row.addWidget(QLabel("Группа:"))
         selector_row.addWidget(self.group_combo)
         selector_row.addStretch()
@@ -76,18 +88,28 @@ class ScheduleTab(QWidget):
         regenerate_week_button = QPushButton("Пересобрать только эту неделю")
         regenerate_week_button.clicked.connect(self._on_regenerate_week)
 
+        semester_excel_button = QPushButton("Выгрузить всё полугодие в Excel")
+        semester_excel_button.clicked.connect(self._on_export_semester_excel)
+        semester_pdf_button = QPushButton("Выгрузить всё полугодие в PDF")
+        semester_pdf_button.clicked.connect(self._on_export_semester_pdf)
+
         actions_row = QHBoxLayout()
         actions_row.addWidget(fill_button)
         actions_row.addWidget(regenerate_semester_button)
         actions_row.addWidget(regenerate_week_button)
+        actions_row.addWidget(semester_excel_button)
+        actions_row.addWidget(semester_pdf_button)
         actions_row.addStretch()
 
-        self.table = QTableWidget(6, len(DAYS))
-        self.table.setHorizontalHeaderLabels(DAYS)
+        self.table = QTableWidget(5, len(ALL_DAYS))
+        self.table.setHorizontalHeaderLabels(ALL_DAYS)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.table.verticalHeader().setMinimumSectionSize(64)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.cellDoubleClicked.connect(self._on_cell_double_clicked)
+        self.table.setVerticalHeaderLabels(
+            ["0 пара"] + [f"Пара {n}" for n in range(1, 5)]
+        )
 
         self.hours_label = QLabel("")
 
@@ -100,17 +122,9 @@ class ScheduleTab(QWidget):
         layout.addWidget(self.table)
         layout.addWidget(self.hours_label)
 
-        self._update_pair_labels()
         self.refresh_reference_data()
 
-    def _update_pair_labels(self) -> None:
-        self.table.setVerticalHeaderLabels(
-            ["0 пара"] + [f"Пара {n}" for n in range(1, 6)]
-        )
-
     def refresh_reference_data(self) -> None:
-        self._update_pair_labels()
-
         current_year = self.year_combo.currentData()
         self.year_combo.blockSignals(True)
         self.year_combo.clear()
@@ -145,18 +159,36 @@ class ScheduleTab(QWidget):
         self.week_combo.blockSignals(False)
         index = self.week_combo.findData(current_week)
         self.week_combo.setCurrentIndex(index if index >= 0 else 0)
-        self.refresh()
+        self._on_week_changed()
 
-    def _current_week_hours_limit(self) -> int | None:
+    def _current_week(self):
         year_id = self.year_combo.currentData()
         semester = self.semester_combo.currentData()
         week_id = self.week_combo.currentData()
         if year_id is None or week_id is None:
             return None
-        for week in list_weeks(year_id, semester):
-            if week.id == week_id:
-                return week.hours
-        return None
+        return next((w for w in list_weeks(year_id, semester) if w.id == week_id), None)
+
+    def _on_week_changed(self) -> None:
+        week = self._current_week()
+        self.saturday_check.blockSignals(True)
+        self.saturday_check.setChecked(bool(week and week.includes_saturday))
+        self.saturday_check.blockSignals(False)
+        self._apply_saturday_visibility()
+        self.refresh()
+
+    def _apply_saturday_visibility(self) -> None:
+        week = self._current_week()
+        show_saturday = bool(week and week.includes_saturday)
+        self.table.setColumnHidden(5, not show_saturday)
+
+    def _on_saturday_toggled(self, checked: bool) -> None:
+        week = self._current_week()
+        if week is None:
+            return
+        set_includes_saturday(week.id, checked)
+        self._apply_saturday_visibility()
+        self.refresh()
 
     def refresh(self) -> None:
         self.table.clearContents()
@@ -168,7 +200,8 @@ class ScheduleTab(QWidget):
 
         entries = list_entries_for_group_week(group_id, week_id)
         for entry in entries:
-            text = f"{entry.subject_name}\n{entry.effective_teacher_name}"
+            name = abbreviate_name(entry.effective_teacher_name)
+            text = f"{entry.subject_name}\n{name}"
             if entry.room:
                 text += f"\nкаб. {entry.room}"
             if entry.substitute_teacher_id:
@@ -190,6 +223,10 @@ class ScheduleTab(QWidget):
         else:
             self.hours_label.setText(f"Часов на неделе: {hours}")
             self.hours_label.setStyleSheet("")
+
+    def _current_week_hours_limit(self) -> int | None:
+        week = self._current_week()
+        return week.hours if week else None
 
     def _on_cell_double_clicked(self, row: int, column: int) -> None:
         group_id = self.group_combo.currentData()
@@ -356,26 +393,28 @@ class ScheduleTab(QWidget):
 
     def _export_context(self):
         group_id = self.group_combo.currentData()
-        week_id = self.week_combo.currentData()
-        if group_id is None or week_id is None:
+        week = self._current_week()
+        if group_id is None or week is None:
             QMessageBox.information(
                 self, "Экспорт", "Сначала выберите год, полугодие, неделю и группу."
             )
             return None
         group_name = self.group_combo.currentText()
-        week_label = (
-            f"{self.semester_combo.currentText()}, {self.week_combo.currentText()}"
+        week_label = f"{self.semester_combo.currentText()}, Неделя {week.week_number}"
+        entries = list_entries_for_group_week(group_id, week.id)
+        return (
+            group_name,
+            week_label,
+            week.date_range_label,
+            entries,
+            week.includes_saturday,
         )
-        entries = list_entries_for_group_week(group_id, week_id)
-        hours = week_hours_for_group(group_id, week_id)
-        limit = self._current_week_hours_limit()
-        return group_name, week_label, entries, hours, limit
 
     def _on_export_excel(self) -> None:
         context = self._export_context()
         if context is None:
             return
-        group_name, week_label, entries, hours, limit = context
+        group_name, week_label, date_range_label, entries, includes_saturday = context
         file_path, _ = QFileDialog.getSaveFileName(
             self, "Экспорт в Excel", f"Расписание_{group_name}.xlsx", "Excel (*.xlsx)"
         )
@@ -383,7 +422,12 @@ class ScheduleTab(QWidget):
             return
         try:
             export_schedule_excel(
-                group_name, week_label, entries, hours, limit, file_path
+                group_name,
+                week_label,
+                date_range_label,
+                entries,
+                includes_saturday,
+                file_path,
             )
         except OSError as error:
             QMessageBox.warning(self, "Ошибка экспорта", str(error))
@@ -396,7 +440,7 @@ class ScheduleTab(QWidget):
         context = self._export_context()
         if context is None:
             return
-        group_name, week_label, entries, hours, limit = context
+        group_name, week_label, date_range_label, entries, includes_saturday = context
         file_path, _ = QFileDialog.getSaveFileName(
             self, "Экспорт в PDF", f"Расписание_{group_name}.pdf", "PDF (*.pdf)"
         )
@@ -404,7 +448,83 @@ class ScheduleTab(QWidget):
             return
         try:
             export_schedule_pdf(
-                group_name, week_label, entries, hours, limit, file_path
+                group_name,
+                week_label,
+                date_range_label,
+                entries,
+                includes_saturday,
+                file_path,
+            )
+        except OSError as error:
+            QMessageBox.warning(self, "Ошибка экспорта", str(error))
+            return
+        QMessageBox.information(
+            self, "Экспорт завершён", f"Файл сохранён:\n{file_path}"
+        )
+
+    def _semester_export_data(self):
+        year_id = self.year_combo.currentData()
+        semester = self.semester_combo.currentData()
+        if year_id is None or semester is None:
+            QMessageBox.information(
+                self, "Экспорт", "Сначала выберите год и полугодие."
+            )
+            return None
+        groups = list_groups()
+        weeks = list_weeks(year_id, semester)
+        if not groups or not weeks:
+            QMessageBox.information(
+                self, "Экспорт", "Нет групп или недель для выгрузки."
+            )
+            return None
+        entries_by_group_week = {
+            (group.id, week.id): list_entries_for_group_week(group.id, week.id)
+            for group in groups
+            for week in weeks
+        }
+        semester_label = self.semester_combo.currentText()
+        return groups, weeks, semester_label, entries_by_group_week
+
+    def _on_export_semester_excel(self) -> None:
+        data = self._semester_export_data()
+        if data is None:
+            return
+        groups, weeks, semester_label, entries_by_group_week = data
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Выгрузка полугодия в Excel",
+            f"Расписание_{semester_label}.xlsx",
+            "Excel (*.xlsx)",
+        )
+        if not file_path:
+            return
+        try:
+            export_semester_excel(
+                groups, weeks, semester_label, entries_by_group_week, file_path
+            )
+        except OSError as error:
+            QMessageBox.warning(self, "Ошибка экспорта", str(error))
+            return
+        QMessageBox.information(
+            self, "Экспорт завершён", f"Файл сохранён:\n{file_path}"
+        )
+
+    def _on_export_semester_pdf(self) -> None:
+        data = self._semester_export_data()
+        if data is None:
+            return
+        groups, weeks, semester_label, entries_by_group_week = data
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Выгрузка полугодия в PDF",
+            f"Расписание_{semester_label}.pdf",
+            "PDF (*.pdf)",
+        )
+        if not file_path:
+            return
+        try:
+            export_semester_pdf(
+                groups, weeks, semester_label, entries_by_group_week, file_path
             )
         except OSError as error:
             QMessageBox.warning(self, "Ошибка экспорта", str(error))

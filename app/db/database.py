@@ -52,24 +52,41 @@ def init_db() -> None:
 
 
 def _apply_migrations(conn: sqlite3.Connection) -> None:
-    columns = {
-        row["name"] for row in conn.execute("PRAGMA table_info(curriculum_items)")
-    }
-    if "lesson_type" not in columns:
-        conn.execute(
-            "ALTER TABLE curriculum_items ADD COLUMN lesson_type TEXT NOT NULL DEFAULT 'theory'"
-        )
+    _add_column_if_missing(
+        conn, "curriculum_items", "lesson_type", "TEXT NOT NULL DEFAULT 'theory'"
+    )
+    _add_column_if_missing(
+        conn, "curriculum_items", "is_double_pair", "INTEGER NOT NULL DEFAULT 0"
+    )
+    _add_column_if_missing(conn, "teachers", "color", "TEXT")
+    _add_column_if_missing(
+        conn,
+        "calendar_weeks",
+        "includes_saturday",
+        "INTEGER NOT NULL DEFAULT 1",
+    )
+    _add_column_if_missing(conn, "calendar_weeks", "start_date", "TEXT")
 
-    _migrate_schedule_entries_allow_zero_period(conn)
+    _migrate_schedule_entries_pair_range(conn)
+    _migrate_bell_schedule_lessons_pair_range(conn)
 
 
-def _migrate_schedule_entries_allow_zero_period(conn: sqlite3.Connection) -> None:
+def _add_column_if_missing(
+    conn: sqlite3.Connection, table: str, column: str, ddl: str
+) -> None:
+    columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+    if column not in columns:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+
+def _migrate_schedule_entries_pair_range(conn: sqlite3.Connection) -> None:
     row = conn.execute(
         "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'schedule_entries'"
     ).fetchone()
-    if row is None or "BETWEEN 1 AND 5" not in row["sql"]:
+    if row is None or "BETWEEN 0 AND 4" in row["sql"]:
         return
 
+    conn.execute("DELETE FROM schedule_entries WHERE pair_number = 5")
     conn.execute("PRAGMA foreign_keys = OFF")
     conn.execute("""
         CREATE TABLE schedule_entries_new (
@@ -78,7 +95,7 @@ def _migrate_schedule_entries_allow_zero_period(conn: sqlite3.Connection) -> Non
             group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
             assignment_id INTEGER NOT NULL REFERENCES teacher_assignments(id) ON DELETE CASCADE,
             day_of_week INTEGER NOT NULL CHECK (day_of_week BETWEEN 1 AND 6),
-            pair_number INTEGER NOT NULL CHECK (pair_number BETWEEN 0 AND 5),
+            pair_number INTEGER NOT NULL CHECK (pair_number BETWEEN 0 AND 4),
             room TEXT,
             substitute_teacher_id INTEGER REFERENCES teachers(id) ON DELETE SET NULL,
             UNIQUE (group_id, calendar_week_id, day_of_week, pair_number)
@@ -88,3 +105,31 @@ def _migrate_schedule_entries_allow_zero_period(conn: sqlite3.Connection) -> Non
     conn.execute("DROP TABLE schedule_entries")
     conn.execute("ALTER TABLE schedule_entries_new RENAME TO schedule_entries")
     conn.execute("PRAGMA foreign_keys = ON")
+
+
+def _migrate_bell_schedule_lessons_pair_range(conn: sqlite3.Connection) -> None:
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'bell_schedule_lessons'"
+    ).fetchone()
+    if row is None or "BETWEEN 1 AND 4" in row["sql"]:
+        return
+
+    conn.execute("DELETE FROM bell_schedule_lessons WHERE pair_number = 5")
+    conn.execute("""
+        CREATE TABLE bell_schedule_lessons_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            day_of_week INTEGER NOT NULL CHECK (day_of_week BETWEEN 1 AND 6),
+            pair_number INTEGER NOT NULL CHECK (pair_number BETWEEN 1 AND 4),
+            lesson_number INTEGER NOT NULL CHECK (lesson_number IN (1, 2)),
+            start_time TEXT NOT NULL,
+            end_time TEXT NOT NULL,
+            UNIQUE (day_of_week, pair_number, lesson_number)
+        )
+        """)
+    conn.execute(
+        "INSERT INTO bell_schedule_lessons_new SELECT * FROM bell_schedule_lessons"
+    )
+    conn.execute("DROP TABLE bell_schedule_lessons")
+    conn.execute(
+        "ALTER TABLE bell_schedule_lessons_new RENAME TO bell_schedule_lessons"
+    )

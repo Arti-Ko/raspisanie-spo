@@ -12,10 +12,11 @@ from app.repositories.schedule import (
 from app.repositories.tarification import Assignment, list_assignments_for_group
 from app.repositories.teachers import list_teachers
 
-DAYS = list(range(1, 7))
-PAIRS = list(range(1, 6))
+ALL_DAYS = list(range(1, 7))
+PAIRS = list(range(1, 5))
 HOURS_PER_PAIR = 2
 PRACTICE_BLOCK_PAIRS = 3
+DOUBLE_PAIR_HOURS = HOURS_PER_PAIR * 2
 
 
 @dataclass
@@ -23,6 +24,10 @@ class AutoScheduleResult:
     weeks_processed: int = 0
     pairs_placed: int = 0
     unplaced_hours: dict[str, int] = field(default_factory=dict)
+
+
+def _days_for_week(week: CalendarWeek) -> list[int]:
+    return ALL_DAYS if week.includes_saturday else ALL_DAYS[:-1]
 
 
 def generate_group_semester_schedule(
@@ -59,22 +64,25 @@ def _generate(
     assignments_by_id = {a.id: a for a in assignments}
     teacher_rooms = {t.id: t.room for t in list_teachers()}
     remaining = _remaining_hours(assignments, all_weeks, group_id, semester)
-    theory_order = [a.id for a in assignments if a.lesson_type == "theory"]
+    theory_order = [
+        a.id for a in assignments if a.lesson_type == "theory" and not a.is_double_pair
+    ]
     pointer = 0
 
     for week in weeks_to_fill:
         result.weeks_processed += 1
+        days = _days_for_week(week)
         existing = list_entries_for_group_week(group_id, week.id)
         occupied = {(e.day_of_week, e.pair_number) for e in existing}
         placed_today = {
             day: {e.assignment_id for e in existing if e.day_of_week == day}
-            for day in DAYS
+            for day in days
         }
         placed_this_week = len(existing)
         limit_pairs = week.hours // HOURS_PER_PAIR
 
         for assignment in assignments:
-            if assignment.lesson_type != "practice":
+            if assignment.lesson_type != "practice" or assignment.is_double_pair:
                 continue
             block_hours = HOURS_PER_PAIR * PRACTICE_BLOCK_PAIRS
             while (
@@ -82,7 +90,7 @@ def _generate(
                 and placed_this_week + PRACTICE_BLOCK_PAIRS <= limit_pairs
             ):
                 placed = _place_block(
-                    group_id, week, assignment, teacher_rooms, occupied
+                    group_id, week, assignment, teacher_rooms, occupied, days
                 )
                 if not placed:
                     break
@@ -91,6 +99,25 @@ def _generate(
                     placed_today.setdefault(day, set()).add(assignment.id)
                 placed_this_week += len(placed)
                 remaining[assignment.id] -= block_hours
+                result.pairs_placed += len(placed)
+
+        for assignment in assignments:
+            if not assignment.is_double_pair:
+                continue
+            while (
+                remaining.get(assignment.id, 0) >= DOUBLE_PAIR_HOURS
+                and placed_this_week + 2 <= limit_pairs
+            ):
+                placed = _place_first_last(
+                    group_id, week, assignment, teacher_rooms, occupied, days
+                )
+                if not placed:
+                    break
+                occupied.update(placed)
+                for day, _pair in placed:
+                    placed_today.setdefault(day, set()).add(assignment.id)
+                placed_this_week += len(placed)
+                remaining[assignment.id] -= DOUBLE_PAIR_HOURS
                 result.pairs_placed += len(placed)
 
         for assignment in assignments:
@@ -104,7 +131,7 @@ def _generate(
             if wanted_pairs <= 0:
                 continue
             placed = _place_same_day(
-                group_id, week, assignment, teacher_rooms, occupied, wanted_pairs
+                group_id, week, assignment, teacher_rooms, occupied, wanted_pairs, days
             )
             if not placed:
                 continue
@@ -115,7 +142,7 @@ def _generate(
             remaining[assignment.id] -= len(placed) * HOURS_PER_PAIR
             result.pairs_placed += len(placed)
 
-        for day in DAYS:
+        for day in days:
             if placed_this_week >= limit_pairs:
                 break
             for pair in PAIRS:
@@ -210,11 +237,11 @@ def _has_conflict(
 
 
 def _place_block(
-    group_id, week, assignment, teacher_rooms, occupied
+    group_id, week, assignment, teacher_rooms, occupied, days
 ) -> list[tuple[int, int]]:
     room = teacher_rooms.get(assignment.teacher_id, "")
     last_start = PAIRS[-1] - PRACTICE_BLOCK_PAIRS + 1
-    for day in DAYS:
+    for day in days:
         for start in range(1, last_start + 1):
             candidate_pairs = list(range(start, start + PRACTICE_BLOCK_PAIRS))
             if any((day, p) in occupied for p in candidate_pairs):
@@ -230,11 +257,31 @@ def _place_block(
     return []
 
 
-def _place_same_day(
-    group_id, week, assignment, teacher_rooms, occupied, wanted_pairs
+def _place_first_last(
+    group_id, week, assignment, teacher_rooms, occupied, days
 ) -> list[tuple[int, int]]:
     room = teacher_rooms.get(assignment.teacher_id, "")
-    for day in DAYS:
+    first_pair, last_pair = PAIRS[0], PAIRS[-1]
+    for day in days:
+        if (day, first_pair) in occupied or (day, last_pair) in occupied:
+            continue
+        if _has_conflict(
+            assignment, teacher_rooms, group_id, week.id, day, first_pair
+        ) or _has_conflict(
+            assignment, teacher_rooms, group_id, week.id, day, last_pair
+        ):
+            continue
+        set_entry(group_id, week.id, day, first_pair, assignment.id, room, None)
+        set_entry(group_id, week.id, day, last_pair, assignment.id, room, None)
+        return [(day, first_pair), (day, last_pair)]
+    return []
+
+
+def _place_same_day(
+    group_id, week, assignment, teacher_rooms, occupied, wanted_pairs, days
+) -> list[tuple[int, int]]:
+    room = teacher_rooms.get(assignment.teacher_id, "")
+    for day in days:
         usable = []
         for pair in PAIRS:
             if (day, pair) in occupied or _has_conflict(

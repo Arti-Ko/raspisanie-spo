@@ -102,7 +102,10 @@ class CurriculumTab(QWidget):
             semester_item = QTableWidgetItem(SEMESTER_LABELS[item.semester])
             semester_item.setData(1000, item.id)
             self.table.setItem(row, 0, semester_item)
-            self.table.setItem(row, 1, QTableWidgetItem(item.subject_name))
+            subject_label = item.subject_name + (
+                " (двойная)" if item.is_double_pair else ""
+            )
+            self.table.setItem(row, 1, QTableWidgetItem(subject_label))
             self.table.setItem(row, 2, QTableWidgetItem(item.lesson_type_label))
             self.table.setItem(row, 3, QTableWidgetItem(str(item.hours_theory)))
             self.table.setItem(row, 4, QTableWidgetItem(str(item.hours_practice)))
@@ -137,7 +140,15 @@ class CurriculumTab(QWidget):
             return
         dialog = CurriculumItemDialog(self)
         if dialog.exec():
-            semester, subject_id, theory, practice, exam, lesson_type = dialog.values()
+            (
+                semester,
+                subject_id,
+                theory,
+                practice,
+                exam,
+                lesson_type,
+                is_double_pair,
+            ) = dialog.values()
             try:
                 add_curriculum_item(
                     program_id,
@@ -148,6 +159,7 @@ class CurriculumTab(QWidget):
                     practice,
                     exam,
                     lesson_type,
+                    is_double_pair,
                 )
             except sqlite3.IntegrityError:
                 QMessageBox.warning(
@@ -171,10 +183,25 @@ class CurriculumTab(QWidget):
         )
         dialog = CurriculumItemDialog(self, item)
         if dialog.exec():
-            semester, subject_id, theory, practice, exam, lesson_type = dialog.values()
+            (
+                semester,
+                subject_id,
+                theory,
+                practice,
+                exam,
+                lesson_type,
+                is_double_pair,
+            ) = dialog.values()
             try:
                 update_curriculum_item(
-                    item_id, semester, subject_id, theory, practice, exam, lesson_type
+                    item_id,
+                    semester,
+                    subject_id,
+                    theory,
+                    practice,
+                    exam,
+                    lesson_type,
+                    is_double_pair,
                 )
             except sqlite3.IntegrityError:
                 QMessageBox.warning(

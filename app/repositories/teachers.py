@@ -2,6 +2,22 @@ from dataclasses import dataclass
 
 from app.db.database import get_connection
 from app.repositories.subjects import Subject
+from app.repositories.text_format import capitalize_full_name
+
+COLOR_PALETTE = [
+    "#F8CBAD",
+    "#C6E0B4",
+    "#BDD7EE",
+    "#FFE699",
+    "#D9C2E9",
+    "#F4B183",
+    "#A9D18E",
+    "#9DC3E6",
+    "#FFD966",
+    "#B4A7D6",
+    "#F2A0A0",
+    "#A0D4D0",
+]
 
 
 @dataclass(frozen=True)
@@ -9,6 +25,7 @@ class Teacher:
     id: int
     full_name: str
     room: str
+    color: str
     subjects: tuple[Subject, ...]
 
 
@@ -30,13 +47,14 @@ def list_teachers() -> list[Teacher]:
     conn = get_connection()
     try:
         rows = conn.execute(
-            "SELECT id, full_name, room FROM teachers ORDER BY full_name"
+            "SELECT id, full_name, room, color FROM teachers ORDER BY full_name"
         ).fetchall()
         return [
             Teacher(
                 row["id"],
                 row["full_name"],
                 row["room"] or "",
+                row["color"] or _next_color(conn),
                 _load_subjects_for_teacher(conn, row["id"]),
             )
             for row in rows
@@ -45,11 +63,19 @@ def list_teachers() -> list[Teacher]:
         conn.close()
 
 
+def _next_color(conn) -> str:
+    count = conn.execute("SELECT COUNT(*) AS n FROM teachers").fetchone()["n"]
+    return COLOR_PALETTE[count % len(COLOR_PALETTE)]
+
+
 def add_teacher(full_name: str, room: str, subject_ids: list[int]) -> int:
+    full_name = capitalize_full_name(full_name)
     conn = get_connection()
     try:
+        color = _next_color(conn)
         cursor = conn.execute(
-            "INSERT INTO teachers (full_name, room) VALUES (?, ?)", (full_name, room)
+            "INSERT INTO teachers (full_name, room, color) VALUES (?, ?, ?)",
+            (full_name, room, color),
         )
         teacher_id = cursor.lastrowid
         _set_teacher_subjects(conn, teacher_id, subject_ids)
@@ -60,13 +86,14 @@ def add_teacher(full_name: str, room: str, subject_ids: list[int]) -> int:
 
 
 def update_teacher(
-    teacher_id: int, full_name: str, room: str, subject_ids: list[int]
+    teacher_id: int, full_name: str, room: str, subject_ids: list[int], color: str
 ) -> None:
+    full_name = capitalize_full_name(full_name)
     conn = get_connection()
     try:
         conn.execute(
-            "UPDATE teachers SET full_name = ?, room = ? WHERE id = ?",
-            (full_name, room, teacher_id),
+            "UPDATE teachers SET full_name = ?, room = ?, color = ? WHERE id = ?",
+            (full_name, room, color, teacher_id),
         )
         _set_teacher_subjects(conn, teacher_id, subject_ids)
         conn.commit()

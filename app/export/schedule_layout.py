@@ -2,8 +2,8 @@ from dataclasses import dataclass
 
 from app.repositories.bell_times import get_zero_period, list_lessons
 
-BLOCKS = ((1, 2, 3), (4, 5, 6))
 DAY_LABELS = {1: "Пн", 2: "Вт", 3: "Ср", 4: "Чт", 5: "Пт", 6: "Сб"}
+BLOCK_SIZE = 3
 
 
 @dataclass(frozen=True)
@@ -19,6 +19,11 @@ class RowSpec:
     @property
     def starts_pair(self) -> bool:
         return self.lesson_number == 1
+
+
+def blocks_for_week(includes_saturday: bool) -> list[tuple[int, ...]]:
+    days = list(range(1, 7)) if includes_saturday else list(range(1, 6))
+    return [tuple(days[i : i + BLOCK_SIZE]) for i in range(0, len(days), BLOCK_SIZE)]
 
 
 def build_block_rows(days: tuple[int, ...]) -> list[RowSpec]:
@@ -37,7 +42,7 @@ def build_block_rows(days: tuple[int, ...]) -> list[RowSpec]:
             lesson.lesson_number
         ] = lesson.label
 
-    for pair_number in range(1, 6):
+    for pair_number in range(1, 5):
         pair_lessons = lessons_by_pair.get(pair_number, {})
         rows.append(RowSpec(pair_number, 1, pair_lessons.get(1, "")))
         rows.append(RowSpec(pair_number, 2, pair_lessons.get(2, "")))

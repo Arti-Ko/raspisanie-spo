@@ -22,7 +22,7 @@ from app.repositories.calendar_weeks import (
 )
 from app.ui.settings.calendar_week_dialog import CalendarWeekDialog
 
-COLUMNS = ["Неделя", "Часов", "Примечание"]
+COLUMNS = ["Неделя", "Часов", "Даты", "Суббота", "Примечание"]
 
 
 class SemesterWeeksWidget(QWidget):
@@ -95,7 +95,11 @@ class SemesterWeeksWidget(QWidget):
             number_item.setData(1000, week.id)
             self.table.setItem(row, 0, number_item)
             self.table.setItem(row, 1, QTableWidgetItem(str(week.hours)))
-            self.table.setItem(row, 2, QTableWidgetItem(week.note))
+            self.table.setItem(row, 2, QTableWidgetItem(week.date_range_label))
+            self.table.setItem(
+                row, 3, QTableWidgetItem("да" if week.includes_saturday else "")
+            )
+            self.table.setItem(row, 4, QTableWidgetItem(week.note))
         self.table.resizeColumnsToContents()
         total = semester_total(self.academic_year_id, self.semester)
         self.total_label.setText(f"Итого за полугодие: {total} ч.")
@@ -120,8 +124,16 @@ class SemesterWeeksWidget(QWidget):
         default_number = next_week_number(self.academic_year_id, self.semester)
         dialog = CalendarWeekDialog(self, default_week_number=default_number)
         if dialog.exec():
-            week_number, hours, note = dialog.values()
-            add_week(self.academic_year_id, self.semester, week_number, hours, note)
+            week_number, hours, note, includes_saturday, start_date = dialog.values()
+            add_week(
+                self.academic_year_id,
+                self.semester,
+                week_number,
+                hours,
+                note,
+                includes_saturday,
+                start_date,
+            )
             self.refresh()
 
     def _on_bulk_add(self) -> None:
@@ -148,8 +160,10 @@ class SemesterWeeksWidget(QWidget):
         )
         dialog = CalendarWeekDialog(self, week)
         if dialog.exec():
-            week_number, hours, note = dialog.values()
-            update_week(week_id, week_number, hours, note)
+            week_number, hours, note, includes_saturday, start_date = dialog.values()
+            update_week(
+                week_id, week_number, hours, note, includes_saturday, start_date
+            )
             self.refresh()
 
     def _on_delete(self) -> None:

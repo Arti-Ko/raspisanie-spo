@@ -6,7 +6,8 @@ CREATE TABLE IF NOT EXISTS subjects (
 CREATE TABLE IF NOT EXISTS teachers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     full_name TEXT NOT NULL,
-    room TEXT
+    room TEXT,
+    color TEXT
 );
 
 CREATE TABLE IF NOT EXISTS teacher_subjects (
@@ -41,6 +42,8 @@ CREATE TABLE IF NOT EXISTS calendar_weeks (
     week_number INTEGER NOT NULL,
     hours INTEGER NOT NULL,
     note TEXT,
+    includes_saturday INTEGER NOT NULL DEFAULT 0,
+    start_date TEXT,
     UNIQUE (academic_year_id, semester, week_number)
 );
 
@@ -54,6 +57,7 @@ CREATE TABLE IF NOT EXISTS curriculum_items (
     hours_practice INTEGER NOT NULL DEFAULT 0,
     hours_exam INTEGER NOT NULL DEFAULT 0,
     lesson_type TEXT NOT NULL DEFAULT 'theory' CHECK (lesson_type IN ('theory', 'practice', 'lab')),
+    is_double_pair INTEGER NOT NULL DEFAULT 0,
     UNIQUE (program_id, course, semester, subject_id)
 );
 
@@ -67,7 +71,7 @@ CREATE TABLE IF NOT EXISTS bell_schedule_days (
 CREATE TABLE IF NOT EXISTS bell_schedule_lessons (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     day_of_week INTEGER NOT NULL CHECK (day_of_week BETWEEN 1 AND 6),
-    pair_number INTEGER NOT NULL CHECK (pair_number BETWEEN 1 AND 5),
+    pair_number INTEGER NOT NULL CHECK (pair_number BETWEEN 1 AND 4),
     lesson_number INTEGER NOT NULL CHECK (lesson_number IN (1, 2)),
     start_time TEXT NOT NULL,
     end_time TEXT NOT NULL,
@@ -91,9 +95,7 @@ INSERT OR IGNORE INTO bell_schedule_lessons (day_of_week, pair_number, lesson_nu
         SELECT 3, 1, '12:00', '12:45' UNION ALL
         SELECT 3, 2, '12:50', '13:35' UNION ALL
         SELECT 4, 1, '13:45', '14:30' UNION ALL
-        SELECT 4, 2, '14:35', '15:20' UNION ALL
-        SELECT 5, 1, '15:30', '16:15' UNION ALL
-        SELECT 5, 2, '16:20', '17:05'
+        SELECT 4, 2, '14:35', '15:20'
     ) p;
 
 CREATE TABLE IF NOT EXISTS teacher_assignments (
@@ -111,7 +113,7 @@ CREATE TABLE IF NOT EXISTS schedule_entries (
     group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
     assignment_id INTEGER NOT NULL REFERENCES teacher_assignments(id) ON DELETE CASCADE,
     day_of_week INTEGER NOT NULL CHECK (day_of_week BETWEEN 1 AND 6),
-    pair_number INTEGER NOT NULL CHECK (pair_number BETWEEN 0 AND 5),
+    pair_number INTEGER NOT NULL CHECK (pair_number BETWEEN 0 AND 4),
     room TEXT,
     substitute_teacher_id INTEGER REFERENCES teachers(id) ON DELETE SET NULL,
     UNIQUE (group_id, calendar_week_id, day_of_week, pair_number)

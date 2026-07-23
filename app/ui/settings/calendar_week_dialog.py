@@ -1,4 +1,7 @@
+from PySide6.QtCore import QDate
 from PySide6.QtWidgets import (
+    QCheckBox,
+    QDateEdit,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -8,6 +11,8 @@ from PySide6.QtWidgets import (
 )
 
 from app.repositories.calendar_weeks import CalendarWeek
+
+DATE_FORMAT = "dd.MM.yyyy"
 
 
 class CalendarWeekDialog(QDialog):
@@ -34,9 +39,24 @@ class CalendarWeekDialog(QDialog):
         self.note_edit = QLineEdit(week.note if week else "")
         self.note_edit.setPlaceholderText("например: праздничная неделя")
 
+        self.saturday_check = QCheckBox("Суббота учебная (6-дневная неделя)")
+        self.saturday_check.setChecked(week.includes_saturday if week else False)
+
+        self.start_date_edit = QDateEdit()
+        self.start_date_edit.setDisplayFormat(DATE_FORMAT)
+        self.start_date_edit.setCalendarPopup(True)
+        if week and week.start_date:
+            self.start_date_edit.setDate(
+                QDate.fromString(week.start_date, "yyyy-MM-dd")
+            )
+        else:
+            self.start_date_edit.setDate(QDate.currentDate())
+
         form = QFormLayout()
         form.addRow("Номер недели*", self.week_number_spin)
         form.addRow("Часов*", self.hours_spin)
+        form.addRow("Дата начала (понедельник)", self.start_date_edit)
+        form.addRow("", self.saturday_check)
         form.addRow("Примечание", self.note_edit)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -47,9 +67,11 @@ class CalendarWeekDialog(QDialog):
         layout.addLayout(form)
         layout.addWidget(buttons)
 
-    def values(self) -> tuple[int, int, str]:
+    def values(self) -> tuple[int, int, str, bool, str]:
         return (
             self.week_number_spin.value(),
             self.hours_spin.value(),
             self.note_edit.text().strip(),
+            self.saturday_check.isChecked(),
+            self.start_date_edit.date().toString("yyyy-MM-dd"),
         )
