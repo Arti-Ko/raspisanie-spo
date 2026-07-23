@@ -53,7 +53,7 @@ if IS_MACOS:
         icon="assets/icon.icns",
         bundle_identifier="ru.artiko.raspisaniespo",
         info_plist={
-            "CFBundleShortVersionString": "1.0.0",
+            "CFBundleShortVersionString": "1.1.0",
             "NSHighResolutionCapable": True,
         },
     )
